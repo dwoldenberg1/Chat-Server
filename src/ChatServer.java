@@ -30,8 +30,8 @@ class ChatServerThread implements Runnable {
             this.in  = new BufferedReader(new InputStreamReader(this.socket.getInputStream()));
             
             /* Some debug */
-            for (int x=0; x<clientlist.size(); x++) {
-                if (this != clientlist.get(x)){ clientlist.get(x).out.println("Client " + this.id + " connected!"); }
+            for (ChatServerThread client : clientlist) {
+                if (this != client){ client.out.println("Client " + this.id + " connected!"); }
             }
             
             /* Say hi to the client */
@@ -66,8 +66,8 @@ class ChatServerThread implements Runnable {
 
     public String changeID(String newID){
         char[] legal = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q' , 'R', 'S', 'T', 'U' , 'V', 'W', 'X', 'Y', 'Z','a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q' , 'r', 's', 't', 'u' , 'v', 'w', 'x', 'y', 'z', '!', '.', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0'};
-        for(int x=0; x<clientlist.size(); x++){
-            if(newID.equalsIgnoreCase(clientlist.get(x).id)){ return "That id is already taken"; }
+        for(ChatServerThread client : clientlist ) {
+            if(newID.equalsIgnoreCase(client.id)){ return "That id is already taken"; }
         }
         for(int x=0; x< newID.length() ; x++){
             boolean exists=false;
@@ -79,26 +79,26 @@ class ChatServerThread implements Runnable {
             if(!exists) { return "That is not valid"; }
         }
 
-        for(int x=0; x< rooms.size(); x++) {
-            if(rooms.get(x).hasClient(this.id)){
-                rooms.get(x).addMember(newID);
-                rooms.get(x).removeClient(this.id);
+        for(room x : rooms ) {
+            if(x.hasClient(this.id)){
+                x.addMember(newID);
+                x.removeClient(this.id);
             }
         }
 
-        for(int x=0; x< rooms.size(); x++) {
-            if(rooms.get(x).hasAdmin(this.id)){
-                rooms.get(x).addAdmin(newID);
-                rooms.get(x).removeAdmin(this.id);
+        for(room x : rooms ) {
+            if(x.hasAdmin(this.id)){
+                x.addAdmin(newID);
+                x.removeAdmin(this.id);
             }
         }
         this.id = newID;
         return "";
     }
-    public String whisper(String whisper, String toSend) {
+    public String whisper(String toSend) {
         boolean exists=false;
-        for(int x=0; x<clientlist.size(); x++){
-            if(toSend.equalsIgnoreCase(clientlist.get(x).id)){ exists=true; }
+        for(ChatServerThread client : clientlist) {
+            if(toSend.equalsIgnoreCase(client.id)){ exists=true; }
         }
         if(!exists){ return "The id you wanted to whisper to was not valid"; }
 
@@ -175,9 +175,9 @@ class ChatServerThread implements Runnable {
 
     public void kick (String user) {
         for(room theRoom : rooms){
-            ArrayList<String> admins = theRoom.getAdmins();
-            for(String admin : admins) {
-                if (admin.equalsIgnoreCase(user)) {
+            ArrayList<String> members = theRoom.getMembers();
+            for(String member : members) {
+                if (member.equalsIgnoreCase(user)) {
                     theRoom.kick(user);
                     addLobby(user);
                 }
@@ -253,33 +253,34 @@ class ChatServerThread implements Runnable {
                     }
                 }
                 else if(fromClient.startsWith("/whisper ")){
-                    String msg = this.whisper(fromClient.substring(StringUtils.ordinalIndexOf(fromClient, " ", 2)+1), fromClient.substring(9, StringUtils.ordinalIndexOf(fromClient, " ", 2)));
+                    String msg = this.whisper(fromClient.substring(9, StringUtils.ordinalIndexOf(fromClient, " ", 2)));
                     String user = fromClient.substring(9, StringUtils.ordinalIndexOf(fromClient, " ", 2));
                     for (int x=0; x<clientlist.size(); x++) {
                         if (user.equalsIgnoreCase(clientlist.get(x).id) && !user.equalsIgnoreCase(this.id)){
                                 clientlist.get(x).out.println(this.id + " whispered : " + (fromClient.substring(StringUtils.ordinalIndexOf(fromClient, " ", 2)+1)).toUpperCase() );
-                                return;
                         }
                     }
-                    this.out.println(msg);
+                    if(!msg.equalsIgnoreCase("")){ this.out.println(msg); }
                 }
                 else if(fromClient.startsWith("/room ")){
                     String msg = this.roomChange(fromClient.substring(6));
                     String roomName = fromClient.substring(6);
                     for (int x=0; x<rooms.size(); x++) {
-                        for (int y=0; y<clientlist.size(); y++){
-                            if (rooms.get(x).title.equalsIgnoreCase(roomName) && rooms.get(x).hasClient(clientlist.get(y).id) && !clientlist.get(y).id.equalsIgnoreCase(this.id)) {
-                                clientlist.get(x).out.println(this.id + " has joined room "+ roomName );
-                            }
-                        }
+                         if (rooms.get(x).title.equalsIgnoreCase(roomName)) {
+                             for (int y = 0; y < clientlist.size(); y++) {
+                                 if (rooms.get(x).hasClient(clientlist.get(y).id) && !clientlist.get(y).id.equalsIgnoreCase(this.id)) {
+                                     clientlist.get(y).out.println(this.id + " has joined room " + roomName);
+                                 }
+                             }
+                         }
                     }
                     this.out.println(msg);
 
                     room aRoom = new room("x");
                     for(room theRoom : rooms){
-                        ArrayList<String> admins = theRoom.getAdmins();
-                        for(String admin : admins) {
-                            if (admin.equalsIgnoreCase(this.id)) {
+                        ArrayList<String> members = theRoom.getMembers();
+                        for(String member : members) {
+                            if (member.equalsIgnoreCase(this.id)) {
                                 aRoom = theRoom;
                             }
                         }
@@ -312,7 +313,6 @@ class ChatServerThread implements Runnable {
                     for (int x=0; x<clientlist.size(); x++) {
                         if (aRoom.getMembers().contains(clientlist.get(x).id) && !user.equalsIgnoreCase(this.id)){
                             clientlist.get(x).out.println(user + " was made an admin of " + roomName);
-                            return;
                         }
                     }
                 }
@@ -335,8 +335,7 @@ class ChatServerThread implements Runnable {
                     this.removeAdmin(user);
                     for (int x=0; x<clientlist.size(); x++) {
                         if (aRoom.getMembers().contains(clientlist.get(x).id) && !user.equalsIgnoreCase(this.id)){
-                            clientlist.get(x).out.println(this.id + " was removed from the admin position in " + roomName);
-                            return;
+                            clientlist.get(x).out.println(clientlist.get(x).id + " was removed from the admin position in " + roomName);
                         }
                     }
                 }
@@ -359,13 +358,15 @@ class ChatServerThread implements Runnable {
                     for (int x=0; x<clientlist.size(); x++) {
                         if (aRoom.getMembers().contains(clientlist.get(x).id) && !user.equalsIgnoreCase(this.id) && !clientlist.get(x).id.equalsIgnoreCase(user)){
                             clientlist.get(x).out.println(user + " was kicked from " + roomName);
-                            return;
+                        }
+                        else if (aRoom.getAdmins().contains(user) && clientlist.get(x).id.equalsIgnoreCase(this.id) ){
+                            this.out.println("You cannot kick an admin of the group");
                         }
                         else if (aRoom.getMembers().contains(clientlist.get(x).id) && clientlist.get(x).id.equalsIgnoreCase(user)) {
                             clientlist.get(x).out.println("You are being kicked from " + roomName + " by " + this.id + ", and being placed in Lobby.");
+                            this.kick(user);
                         }
                     }
-                    this.kick(user);
                 }
                 else if(fromClient.startsWith("/topic ")){
                     if (!this.isAdmin()){
@@ -373,21 +374,24 @@ class ChatServerThread implements Runnable {
                     }
                     String topic = fromClient.substring(7);
                     String roomName="";
-                    room aRoom = new room("x");
+
                     for(room theRoom : rooms){
-                        ArrayList<String> admins = theRoom.getAdmins();
-                        for(String admin : admins) {
-                            if (admin.equalsIgnoreCase(this.id)) {
+                        ArrayList<String> members = theRoom.getMembers();
+                        for(String member : members) {
+                            if (member.equalsIgnoreCase(this.id)) {
                                 roomName = theRoom.title;
-                                aRoom = theRoom;
                             }
                         }
                     }
+
                     this.addTopic(topic);
-                    for (int x=0; x<clientlist.size(); x++) {
-                        if (aRoom.getMembers().contains(clientlist.get(x).id) && !clientlist.get(x).id.equalsIgnoreCase(this.id)) {
-                            clientlist.get(x).out.println(this.id + " changed the topic of the room to " + topic);
-                            return;
+                    for (int x=0; x<rooms.size(); x++) {
+                        if (rooms.get(x).title.equalsIgnoreCase(roomName)) {
+                            for (int y = 0; y < clientlist.size(); y++) {
+                                if (rooms.get(x).hasClient(clientlist.get(y).id) && !clientlist.get(y).id.equalsIgnoreCase(this.id) && rooms.get(x).getAdmins().contains(this.id)) {
+                                    clientlist.get(y).out.println(this.id + " changed the topic of the room to " + topic);
+                                }
+                            }
                         }
                     }
                 }
